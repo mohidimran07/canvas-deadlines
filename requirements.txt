@@ -1,0 +1,6 @@
+requests>=2.32
+python-dotenv>=1.0
+anthropic>=1.10
+icalendar>=6.0
+python-dateutil>=2.9
+pypdf>=5.0

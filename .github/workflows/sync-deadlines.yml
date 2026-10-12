@@ -1,0 +1,77 @@
+name: Sync Canvas deadlines
+
+# Runs twice a day and whenever you trigger it manually (Actions tab -> this
+# workflow -> "Run workflow"). Cron is always UTC - these two times land
+# roughly around 8am and 8pm America/Toronto, drifting by about an hour
+# across the daylight-saving change (a known GitHub Actions limitation,
+# not a bug - cron doesn't know about time zones).
+on:
+  schedule:
+    - cron: "0 12 * * *"   # ~8am Toronto (EDT) / ~7am Toronto (EST)
+    - cron: "0 0 * * *"    # ~8pm Toronto (EDT) / ~7pm Toronto (EST), previous UTC day
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  sync-and-publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The Claude-extraction cache can't use a fixed key, because
+      # actions/cache never overwrites an existing key - using the unique
+      # run ID as the key (with a stable prefix as the restore fallback) is
+      # the standard pattern for a cache that needs to be updated every run.
+      - name: Restore extraction cache
+        uses: actions/cache@v4
+        with:
+          path: cache/extraction_cache.json
+          key: extraction-cache-${{ github.run_id }}
+          restore-keys: |
+            extraction-cache-
+
+      - name: Run the sync
+        env:
+          CANVAS_BASE_URL: "https://q.utoronto.ca"
+          CANVAS_TOKEN: ${{ secrets.CANVAS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python main.py
+
+      # Published at a secret, hard-to-guess path (from a repo secret, not
+      # committed anywhere) as a defense-in-depth measure, since GitHub
+      # Pages sites are reachable by URL regardless of repo visibility.
+      - name: Prepare Pages site
+        env:
+          ICS_PATH_TOKEN: ${{ secrets.ICS_PATH_TOKEN }}
+        run: |
+          mkdir -p "site/${ICS_PATH_TOKEN}"
+          cp output/deadlines.ics "site/${ICS_PATH_TOKEN}/deadlines.ics"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

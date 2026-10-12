@@ -1,0 +1,17 @@
+# Secrets - never commit this
+.env
+
+# Cache of Claude extractions (safe to delete, will just cost more API calls to rebuild)
+cache/*.json
+
+# Generated calendar output
+output/*.ics
+
+# Scratch folder the CI workflow builds the Pages site in (never created locally)
+site/
+
+# Python noise
+__pycache__/
+*.pyc
+.venv/
+venv/
